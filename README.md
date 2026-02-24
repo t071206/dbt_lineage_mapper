@@ -158,38 +158,6 @@ To create a GitHub Personal Access Token (PAT):
 
 Remember that tokens are like passwords - keep them secure and never commit them to version control.
 
-## Mermaid Diagram
-
-The generated Mermaid diagram uses the following conventions:
-
-- Blue nodes: dbt models
-- Orange nodes: dbt sources
-- Red nodes with dashed borders: Missing references
-- Thick edges: Cross-project references
-
-Example:
-
-```mermaid
-graph TD;
-    project1_model1[model1]:::model;
-    project1_model2[model2]:::model;
-    project2_model3[model3]:::model;
-    project1_source_source1_table1[source1.table1]:::source;
-    
-    project1_model1 --> project1_model2:::;
-    project1_model2 --> project2_model3:::crossProject;
-    project1_model1 --> project1_source_source1_table1:::;
-    
-    %% Styling
-    classDef model fill:#1f77b4,stroke:#333,color:white;
-    classDef source fill:#ff7f0e,stroke:#333,color:white;
-    classDef missing fill:#d62728,stroke:#333,color:white,stroke-dasharray: 5 5;
-    classDef crossProject stroke:#333,stroke-width:4px;
-    
-    %% Tooltip styling
-    linkStyle default stroke:#333,stroke-width:2px;
-```
-
 ## Output Formats
 
 ### Interactive HTML Visualization (Default)
