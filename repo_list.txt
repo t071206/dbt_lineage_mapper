@@ -1,0 +1,3 @@
+https://github.com/t071206/cpo-sops-vendor-management-dbt
+https://github.com/t071206/cpo-sops-sims-dbt
+https://github.com/t071206/cpo-pace-dbt-weekly

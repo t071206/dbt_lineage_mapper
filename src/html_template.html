@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{title}}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            color: #333;
+        }
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            z-index: 1000;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #legend h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        #header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #495057;
+        }
+        #controls {
+            display: flex;
+            gap: 10px;
+        }
+        #search-container {
+            position: relative;
+        }
+        #search {
+            padding: 5px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            width: 200px;
+        }
+        #search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: white;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            display: none;
+            z-index: 1000;
+        }
+        .search-result {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .search-result:hover {
+            background-color: #f8f9fa;
+        }
+        #content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        #cy {
+            flex: 1;
+            z-index: 999;
+        }
+        #sidebar {
+            width: 300px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-left: 1px solid #e9ecef;
+            overflow-y: auto;
+            display: none;
+        }
+        #node-details {
+            margin-bottom: 20px;
+        }
+        #node-details h2 {
+            margin-top: 0;
+            color: #495057;
+        }
+        #node-details p {
+            margin: 5px 0;
+        }
+        #node-details .label {
+            font-weight: bold;
+            color: #6c757d;
+        }
+        .button {
+            padding: 5px 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #e9ecef;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div id="title">{{title}}</div>
+        <div id="controls">
+            <div id="project-filter" style="margin-right: 10px;">
+                <select id="project-selector" class="button">
+                    <option value="all">All Projects</option>
+                    <!-- Project options will be populated dynamically -->
+                </select>
+            </div>
+            <div id="search-container">
+                <input type="text" id="search" placeholder="Search nodes...">
+                <div id="search-results"></div>
+            </div>
+            <button id="fit-button" class="button">Fit</button>
+            <button id="reset-button" class="button">Reset</button>
+            <div style="font-size: 12px; margin-top: 5px; color: #666;">Tip: Double-click a node to focus on its complete lineage</div>
+        </div>
+    </div>
+    <div id="content">
+        <div id="cy"></div>
+        <div id="legend">
+            <h3>Projects</h3>
+            <div id="project-legend"></div>
+            <h3>Node Types</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="width: 20px; height: 15px; border-radius: 3px;"></div>
+                <div>Model (SQL file)</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="width: 20px; height: 15px; border-radius: 50%; border: 2px dashed #333;"></div>
+                <div>Model (schema.yml)</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ff7f0e;"></div>
+                <div>Source</div>
+            </div>
+            
+            <h3>Edge Types</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #333;"></div>
+                <div>Normal Dependency</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ff0000;"></div>
+                <div>Cross-Project Dependency</div>
+            </div>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; margin-right: 8px; border-top: 2px dashed #9932CC;"></div>
+                <div>Inferred Cross-Project Source</div>
+            </div>
+        </div>
+        <div id="sidebar">
+            <div id="node-details">
+                <h2>Node Details</h2>
+                <p><span class="label">ID:</span> <span id="node-id"></span></p>
+                <p><span class="label">Name:</span> <span id="node-name"></span></p>
+                <p><span class="label">Type:</span> <span id="node-type"></span></p>
+                <p><span class="label">Project:</span> <span id="node-project"></span></p>
+                <p><span class="label">Path:</span> <span id="node-path"></span></p>
+                <p><span class="label">Compiled Name:</span> <span id="node-compiled-name"></span></p>
+                <p><span class="label">Defined In:</span> <span id="node-defined-in"></span></p>
+            </div>
+            <div id="node-dependencies">
+                <h3>Dependencies</h3>
+                <div id="upstream-dependencies">
+                    <h4>Upstream</h4>
+                    <ul id="upstream-list"></ul>
+                </div>
+                <div id="downstream-dependencies">
+                    <h4>Downstream</h4>
+                    <ul id="downstream-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="tooltip" class="tooltip"></div>
+    <script>
+        // Generate colors for projects
+        function generateProjectColors(projects) {
+            var colors = [
+                '#1f77b4', // blue
+                '#ff7f0e', // orange
+                '#2ca02c', // green
+                '#d62728', // red
+                '#9467bd', // purple
+                '#8c564b', // brown
+                '#e377c2', // pink
+                '#7f7f7f', // gray
+                '#bcbd22', // olive
+                '#17becf'  // teal
+            ];
+            
+            var projectColors = {};
+            for (var i = 0; i < projects.length; i++) {
+                projectColors[projects[i]] = colors[i % colors.length];
+            }
+            
+            return projectColors;
+        }
+        
+        // Get all projects from nodes
+        var elements = {{elements_json}};
+        var allNodes = [];
+        var projects = [];
+
+        // Process elements to identify nodes and extract projects
+        elements.forEach(function(element) {
+            // Check if it's a node (not an edge) by looking at classes property or data structure
+            if (!element.classes || element.classes !== 'edge') {
+                allNodes.push(element);
+                if (element.data && element.data.project && projects.indexOf(element.data.project) === -1) {
+                    projects.push(element.data.project);
+                }
+            }
+        });
+        
+        var projectColors = generateProjectColors(projects);
+        
+        // Create project legend
+        var projectLegend = document.getElementById('project-legend');
+        for (var i = 0; i < projects.length; i++) {
+            var project = projects[i];
+            var legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            
+            var colorBox = document.createElement('div');
+            colorBox.className = 'legend-color';
+            colorBox.style.backgroundColor = projectColors[project];
+            
+            var projectName = document.createElement('div');
+            projectName.textContent = project;
+            
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(projectName);
+            projectLegend.appendChild(legendItem);
+        }
+        
+        // Populate project selector
+        var projectSelector = document.getElementById('project-selector');
+        for (var i = 0; i < projects.length; i++) {
+            var option = document.createElement('option');
+            option.value = projects[i];
+            option.textContent = projects[i];
+            projectSelector.appendChild(option);
+        }
+        
+        // Store original elements for reset
+        var originalElements = null;
+        
+        // Initialize Cytoscape
+        var cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: elements,
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'label': 'data(label)',
+                        'text-valign': 'center',
+                        'text-halign': 'center',
+                        'background-color': function(ele) {
+                            return projectColors[ele.data('project')] || '#1f77b4';
+                        },
+                        'color': 'white',
+                        'text-outline-width': 1,
+                        'text-outline-color': function(ele) {
+                            return projectColors[ele.data('project')] || '#1f77b4';
+                        },
+                        'font-size': '12px',
+                        'width': 'label',
+                        'height': 'label',
+                        'padding': '10px',
+                        'shape': 'roundrectangle'
+                    }
+                },
+                {
+                    selector: 'node.model',
+                    style: {
+                        'background-color': function(ele) {
+                            return projectColors[ele.data('project')] || '#1f77b4';
+                        },
+                        'text-outline-color': function(ele) {
+                            return projectColors[ele.data('project')] || '#1f77b4';
+                        }
+                    }
+                },
+                {
+                    selector: 'node.model[defined_in = "schema"]',
+                    style: {
+                        'shape': 'ellipse',
+                        'border-width': 2,
+                        'border-style': 'dashed',
+                        'border-color': '#333'
+                    }
+                },
+                {
+                    selector: 'node.model[defined_in = "model"]',
+                    style: {
+                        'shape': 'roundrectangle'
+                    }
+                },
+                {
+                    selector: 'node.source',
+                    style: {
+                        'background-color': '#ff7f0e',
+                        'text-outline-color': '#ff7f0e'
+                    }
+                },
+                {
+                    selector: 'node.missing',
+                    style: {
+                        'background-color': '#d62728',
+                        'text-outline-color': '#d62728',
+                        'border-width': 2,
+                        'border-style': 'dashed',
+                        'border-color': '#333'
+                    }
+                },
+                {
+                    selector: 'node:selected',
+                    style: {
+                        'border-width': 3,
+                        'border-color': '#333'
+                    }
+                },
+                {
+                    selector: 'node.external',
+                    style: {
+                        'border-width': 3,
+                        'border-color': '#ff0000',
+                        'border-style': 'dashed'
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 2,
+                        'line-color': '#333',
+                        'source-arrow-color': '#333',
+                        'source-arrow-shape': 'triangle',
+                        'curve-style': 'bezier'
+                    }
+                },
+                {
+                    selector: 'edge.crossProject',
+                    style: {
+                        'width': 4,
+                        'line-color': '#ff0000',
+                        'source-arrow-color': '#ff0000',
+                        'source-arrow-shape': 'triangle'
+                    }
+                },
+                {
+                    selector: 'edge[inferred]',
+                    style: {
+                        'width': 3,
+                        'line-color': '#9932CC',  // Purple color for inferred edges
+                        'source-arrow-color': '#9932CC',
+                        'source-arrow-shape': 'triangle',
+                        'line-style': 'dashed',   // Dashed line to indicate inferred connection
+                        'line-dash-pattern': [6, 3]  // Dash pattern
+                    }
+                }
+            ],
+            layout: {
+                name: 'dagre',
+                rankDir: 'LR',
+                nodeSep: 50,
+                rankSep: 100,
+                padding: 50
+            }
+        });
+        
+        // Add event listeners
+        
+        // Helper function to get all upstream nodes recursively
+        function getAllUpstream(node, collection) {
+            var upstream = node.incomers('node');
+            collection = collection.union(upstream);
+            
+            // Recursively get upstream nodes for each direct upstream node
+            upstream.forEach(function(upNode) {
+                collection = getAllUpstream(upNode, collection);
+            });
+            
+            return collection;
+        }
+        
+        // Helper function to get all downstream nodes recursively
+        function getAllDownstream(node, collection) {
+            var downstream = node.outgoers('node');
+            collection = collection.union(downstream);
+            
+            // Recursively get downstream nodes for each direct downstream node
+            downstream.forEach(function(downNode) {
+                collection = getAllDownstream(downNode, collection);
+            });
+            
+            return collection;
+        }
+        
+        // Function to focus on a node and its complete lineage
+        function focusOnNode(node) {
+            // Store original elements if not already stored
+            if (!originalElements) {
+                originalElements = cy.elements().jsons();
+            }
+            
+            // Create an empty collection
+            var lineage = cy.collection();
+            
+            // Get all upstream nodes
+            lineage = getAllUpstream(node, lineage);
+            
+            // Get all downstream nodes
+            lineage = getAllDownstream(node, lineage);
+            
+            // Add the selected node
+            lineage = lineage.add(node);
+            
+            // Get all edges between the nodes in the lineage
+            var edges = cy.edges().filter(function(edge) {
+                return lineage.contains(edge.source()) && lineage.contains(edge.target());
+            });
+            
+            // Add edges to the lineage
+            lineage = lineage.add(edges);
+            
+            // Filter to show only the lineage
+            cy.elements().not(lineage).remove();
+            
+            // Apply layout to the filtered graph
+            cy.layout({
+                name: 'dagre',
+                rankDir: 'LR',
+                nodeSep: 50,
+                rankSep: 100,
+                padding: 50
+            }).run();
+            
+            // Center on the selected node
+            cy.center(node);
+            cy.zoom(1.5);
+        }
+        
+        // Double-click event to show only dependencies and lineage
+        cy.on('dblclick', 'node', function(evt) {
+            var node = evt.target;
+            focusOnNode(node);
+        });
+        
+        // Single-click event to show node details
+        cy.on('tap', 'node', function(evt) {
+            var node = evt.target;
+            var data = node.data();
+            
+            // Update sidebar with node details
+            document.getElementById('node-id').textContent = data.id;
+            document.getElementById('node-name').textContent = data.label;
+            document.getElementById('node-type').textContent = data.type;
+            document.getElementById('node-project').textContent = data.project;
+            document.getElementById('node-path').textContent = data.path;
+            document.getElementById('node-compiled-name').textContent = data.compiled_name;
+            document.getElementById('node-defined-in').textContent = data.defined_in || 'N/A';
+            
+            // Add focus button
+            var focusButton = document.createElement('button');
+            focusButton.textContent = 'Focus on complete lineage';
+            focusButton.className = 'button';
+            focusButton.style.marginTop = '10px';
+            focusButton.addEventListener('click', function() {
+                focusOnNode(node);
+            });
+            
+            // Remove any existing focus button
+            var existingButton = document.getElementById('focus-button');
+            if (existingButton) {
+                existingButton.remove();
+            }
+            
+            focusButton.id = 'focus-button';
+            document.getElementById('node-details').appendChild(focusButton);
+            
+            // Get upstream dependencies
+            var upstreamList = document.getElementById('upstream-list');
+            upstreamList.innerHTML = '';
+            
+            var incomers = node.incomers('node');
+            if (incomers.length === 0) {
+                upstreamList.innerHTML = '<li>None</li>';
+            } else {
+                incomers.forEach(function(incomer) {
+                    var li = document.createElement('li');
+                    li.textContent = incomer.data('project') ? 
+                        incomer.data('project') + ': ' + incomer.data('label') : 
+                        incomer.data('label');
+                    li.style.cursor = 'pointer';
+                    li.addEventListener('click', function() {
+                        cy.elements().unselect();
+                        incomer.select();
+                        cy.center(incomer);
+                    });
+                    upstreamList.appendChild(li);
+                });
+            }
+            
+            // Get downstream dependencies
+            var downstreamList = document.getElementById('downstream-list');
+            downstreamList.innerHTML = '';
+            
+            var outgoers = node.outgoers('node');
+            if (outgoers.length === 0) {
+                downstreamList.innerHTML = '<li>None</li>';
+            } else {
+                outgoers.forEach(function(outgoer) {
+                    var li = document.createElement('li');
+                    li.textContent = outgoer.data('project') ? 
+                        outgoer.data('project') + ': ' + outgoer.data('label') : 
+                        outgoer.data('label');
+                    li.style.cursor = 'pointer';
+                    li.addEventListener('click', function() {
+                        cy.elements().unselect();
+                        outgoer.select();
+                        cy.center(outgoer);
+                    });
+                    downstreamList.appendChild(li);
+                });
+            }
+            
+            // Show sidebar
+            document.getElementById('sidebar').style.display = 'block';
+        });
+        
+        cy.on('tap', function(evt) {
+            if (evt.target === cy) {
+                // Hide sidebar when clicking on background
+                document.getElementById('sidebar').style.display = 'none';
+            }
+        });
+        
+        // Add tooltip on hover
+        cy.on('mouseover', 'node', function(evt) {
+            var node = evt.target;
+            var data = node.data();
+            
+            var tooltip = document.getElementById('tooltip');
+            tooltip.textContent = data.project ? data.project + ': ' + data.label : data.label;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (evt.renderedPosition.x + 10) + 'px';
+            tooltip.style.top = (evt.renderedPosition.y + 10) + 'px';
+        });
+        
+        cy.on('mouseout', 'node', function() {
+            document.getElementById('tooltip').style.display = 'none';
+        });
+        
+        // Add search functionality
+        var searchInput = document.getElementById('search');
+        var searchResults = document.getElementById('search-results');
+        
+        searchInput.addEventListener('input', function() {
+            var query = this.value.toLowerCase();
+            
+            if (query.length < 2) {
+                searchResults.style.display = 'none';
+                return;
+            }
+            
+            // Filter nodes based on query
+            var matchingNodes = allNodes.filter(function(node) {
+                // Make sure node.data exists and has the required properties
+                if (!node.data) return false;
+                
+                var label = node.data.label ? node.data.label.toLowerCase() : '';
+                var id = node.data.id ? node.data.id.toLowerCase() : '';
+                var project = node.data.project ? node.data.project.toLowerCase() : '';
+                var type = node.data.type ? node.data.type.toLowerCase() : '';
+                
+                return label.includes(query) || 
+                       id.includes(query) || 
+                       project.includes(query) || 
+                       type.includes(query);
+            });
+            
+            // Display results
+            searchResults.innerHTML = '';
+            
+            if (matchingNodes.length === 0) {
+                searchResults.innerHTML = '<div class="search-result">No results found</div>';
+            } else {
+                matchingNodes.forEach(function(node) {
+                    var resultItem = document.createElement('div');
+                    resultItem.className = 'search-result';
+                    resultItem.textContent = node.data.project ? 
+                        node.data.project + ': ' + node.data.label : 
+                        node.data.label;
+                    
+                    resultItem.addEventListener('click', function() {
+                        var nodeInGraph = cy.getElementById(node.data.id);
+                        cy.elements().unselect();
+                        nodeInGraph.select();
+                        cy.center(nodeInGraph);
+                        cy.zoom(1.5);
+                        searchResults.style.display = 'none';
+                        searchInput.value = '';
+                    });
+                    
+                    searchResults.appendChild(resultItem);
+                });
+            }
+            
+            searchResults.style.display = 'block';
+        });
+        
+        // Hide search results when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!searchInput.contains(event.target) && !searchResults.contains(event.target)) {
+                searchResults.style.display = 'none';
+            }
+        });
+        
+        // Add project filtering functionality
+        document.getElementById('project-selector').addEventListener('change', function() {
+            var selectedProject = this.value;
+            
+            // Store original elements if not already stored
+            if (!originalElements) {
+                originalElements = cy.elements().jsons();
+            }
+            
+            // If "All Projects" is selected, show everything
+            if (selectedProject === 'all') {
+                // Restore original elements
+                cy.elements().remove();
+                cy.add(originalElements);
+            } else {
+                // Restore original elements first to ensure we're working with the complete graph
+                cy.elements().remove();
+                cy.add(originalElements);
+                
+                // Get all nodes from the selected project
+                var projectNodes = cy.nodes().filter(function(node) {
+                    return node.data('project') === selectedProject;
+                });
+                
+                // Get all nodes from other projects that are directly connected to nodes in the selected project
+                var connectedNodes = cy.collection();
+                projectNodes.forEach(function(node) {
+                    // Get immediate neighbors (both incoming and outgoing)
+                    var neighbors = node.neighborhood().nodes();
+                    connectedNodes = connectedNodes.union(neighbors);
+                });
+                
+                // Combine project nodes and connected nodes
+                var visibleNodes = projectNodes.union(connectedNodes);
+                
+                // Get edges between visible nodes
+                var visibleEdges = cy.edges().filter(function(edge) {
+                    return visibleNodes.contains(edge.source()) && visibleNodes.contains(edge.target());
+                });
+                
+                // Hide all elements, then show only the visible ones
+                cy.elements().not(visibleNodes.union(visibleEdges)).remove();
+                
+                // Mark external nodes
+                cy.nodes().forEach(function(node) {
+                    if (node.data('project') !== selectedProject) {
+                        node.addClass('external');
+                    } else {
+                        node.removeClass('external');
+                    }
+                });
+            }
+            
+            // Apply layout to the filtered graph
+            cy.layout({
+                name: 'dagre',
+                rankDir: 'LR',
+                nodeSep: 50,
+                rankSep: 100,
+                padding: 50
+            }).run();
+            
+            // Fit the graph to the viewport
+            cy.fit();
+        });
+        
+        // Add button functionality
+        document.getElementById('fit-button').addEventListener('click', function() {
+            cy.fit();
+        });
+        
+        document.getElementById('reset-button').addEventListener('click', function() {
+            // If we have stored original elements, restore them
+            if (originalElements) {
+                cy.elements().remove();
+                cy.add(originalElements);
+                originalElements = null;
+                
+                // Apply layout to the restored graph
+                cy.layout({
+                    name: 'dagre',
+                    rankDir: 'LR',
+                    nodeSep: 50,
+                    rankSep: 100,
+                    padding: 50
+                }).run();
+            }
+            
+            cy.elements().unselect();
+            cy.fit();
+            document.getElementById('sidebar').style.display = 'none';
+        });
+    </script>
+</body>
+</html>
