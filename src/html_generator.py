@@ -143,14 +143,52 @@ class HTMLGenerator:
                 'classes': node_type
             })
         
+        # Add missing nodes as placeholders
+        for node_id, node_info in self.lineage_graph.missing_nodes.items():
+            # Extract node information
+            node_type = node_info.get('type', 'model')
+            project = node_info.get('project', '')
+            name = node_info.get('name', '')
+            
+            # Create node label
+            if node_type == 'source' and 'source' in node_info:
+                source = node_info.get('source', '')
+                if source:
+                    label = f"{source}.{name}"
+                else:
+                    label = name
+            else:
+                label = name
+            
+            # Create node data
+            node_data = {
+                'id': node_id,
+                'label': label,
+                'type': node_type,
+                'project': project,
+                'path': 'External Reference',
+                'missing': True
+            }
+            
+            # Add node to list with 'missing' class
+            cytoscape_nodes.append({
+                'data': node_data,
+                'classes': f"{node_type} missing"
+            })
+        
         # Convert edges
         for edge in edges:
             source_id = edge.get('source', '')
             target_id = edge.get('target', '')
             
+            # Skip edges where either source or target doesn't exist
+            if (source_id not in self.lineage_graph.nodes and source_id not in self.lineage_graph.missing_nodes) or \
+               (target_id not in self.lineage_graph.nodes and target_id not in self.lineage_graph.missing_nodes):
+                continue
+            
             # Determine if it's a cross-project edge
-            source_node = self.lineage_graph.get_node_by_id(source_id)
-            target_node = self.lineage_graph.get_node_by_id(target_id)
+            source_node = self.lineage_graph.get_node_by_id(source_id) or self.lineage_graph.missing_nodes.get(source_id)
+            target_node = self.lineage_graph.get_node_by_id(target_id) or self.lineage_graph.missing_nodes.get(target_id)
             
             edge_class = ''
             if source_node and target_node and source_node.get('project') != target_node.get('project'):
@@ -166,6 +204,10 @@ class HTMLGenerator:
             # Add inferred property if present
             if 'inferred' in edge:
                 edge_data['inferred'] = edge['inferred']
+            
+            # Add cross_project property if present
+            if 'cross_project' in edge:
+                edge_data['cross_project'] = edge['cross_project']
             
             # Add edge to list
             cytoscape_edges.append({

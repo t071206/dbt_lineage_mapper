@@ -18,6 +18,7 @@ class LineageGraph:
         self.projects = {}  # Dict[project_name, project_info]
         self.nodes = {}  # Dict[node_id, node_info]
         self.edges = []  # List of (source_id, target_id, metadata)
+        self.missing_nodes = {}  # Dict[node_id, node_info] for referenced but missing nodes
     
     def add_project(self, project_info: Dict[str, Any]) -> None:
         """
@@ -145,6 +146,49 @@ class LineageGraph:
                 else:
                     logger.warning(f"Unknown dependency type: {dep_type}")
                     continue
+                
+                # Check if target node exists, if not create a placeholder
+                if target_id not in self.nodes:
+                    # Extract project and model name from target_id
+                    if '.' in target_id:
+                        if target_id.startswith(f"{project_name}.source."):
+                            # Handle source references
+                            source_ref = target_id.replace(f"{project_name}.source.", "")
+                            if '.' in source_ref:
+                                source_name, table_name = source_ref.split('.', 1)
+                            else:
+                                source_name = source_ref
+                                table_name = None
+                                
+                            self.missing_nodes[target_id] = {
+                                'id': target_id,
+                                'name': table_name if table_name else source_name,
+                                'source': source_name if table_name else None,
+                                'project': project_name,
+                                'type': 'source',
+                                'missing': True
+                            }
+                        else:
+                            # Handle model references
+                            target_project, target_model = target_id.split('.', 1)
+                            self.missing_nodes[target_id] = {
+                                'id': target_id,
+                                'name': target_model,
+                                'project': target_project,
+                                'type': 'model',
+                                'missing': True
+                            }
+                    else:
+                        # Same project reference
+                        self.missing_nodes[target_id] = {
+                            'id': target_id,
+                            'name': target_id,
+                            'project': project_name,
+                            'type': dep_type,
+                            'missing': True
+                        }
+                    
+                    logger.warning(f"Referenced node not found, creating placeholder: {target_id}")
                 
                 # Add edge to the graph - reversed direction to show data flow
                 # Instead of model -> dependency, we now have dependency -> model
@@ -417,17 +461,21 @@ class LineageGraph:
         Returns:
             Set of source node IDs that were linked
         """
-        # Get all source nodes
+        # Get all source nodes (including missing ones)
         source_nodes = [node for node in self.nodes.values() if node['type'] == 'source']
+        missing_source_nodes = [node for node in self.missing_nodes.values() if node['type'] == 'source']
+        all_source_nodes = source_nodes + missing_source_nodes
         
-        # Get all model nodes
+        # Get all model nodes (including missing ones)
         model_nodes = [node for node in self.nodes.values() if node['type'] == 'model']
+        missing_model_nodes = [node for node in self.missing_nodes.values() if node['type'] == 'model']
+        all_model_nodes = model_nodes + missing_model_nodes
         
         # Track which sources have been linked
         linked_sources = set()
         
         # For each source node
-        for source_node in source_nodes:
+        for source_node in source_nodes:  # Only try to link actual source nodes, not missing ones
             source_project = source_node['project']
             source_name = source_node['name']
             
@@ -447,7 +495,7 @@ class LineageGraph:
                 continue
                 
             # Look for models with matching compiled names
-            for model_node in model_nodes:
+            for model_node in model_nodes:  # Only try to match with actual model nodes, not missing ones
                 model_project = model_node['project']
                 model_name = model_node['name']
                 

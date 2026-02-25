@@ -203,6 +203,10 @@
                 <div class="legend-color pattern-grid" style="background: linear-gradient(45deg, #1f77b4, #ff7f0e, #2ca02c, #d62728);"></div>
                 <div>Cross-Project Source (Project Color)</div>
             </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: white; border: 3px solid #ff0000;"></div>
+                <div>External Reference (Model or source referenced but not found in analyzed projects)</div>
+            </div>
             
             <h3>Edge Types</h3>
             <div class="legend-item">
@@ -390,11 +394,12 @@
                 {
                     selector: 'node.missing',
                     style: {
-                        'background-color': '#d62728',
-                        'text-outline-color': '#d62728',
-                        'border-width': 2,
-                        'border-style': 'dashed',
-                        'border-color': '#333'
+                        'background-color': 'white',
+                        'color': 'black',
+                        'text-outline-width': 0,
+                        'border-width': 3,
+                        'border-style': 'solid',
+                        'border-color': '#ff0000'
                     }
                 },
                 {
