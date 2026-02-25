@@ -18,16 +18,19 @@ logger = logging.getLogger(__name__)
 class DBTProjectParser:
     """Parser for dbt project files."""
     
-    def __init__(self, repo_provider: RepositoryProvider):
+    def __init__(self, repo_provider: RepositoryProvider, profiles_parser=None):
         """
         Initialize the dbt project parser.
         
         Args:
             repo_provider: Repository provider for accessing repository contents
+            profiles_parser: Optional parser for dbt profiles.yml
         """
         self.repo_provider = repo_provider
+        self.profiles_parser = profiles_parser
         self.project_name = None
         self.project_config = None
+        self.profile_name = None  # Will be set from project config or defaults to project_name
         self.models = {}  # Dict[model_name, model_info]
         self.sources = {}  # Dict[source_name, source_info]
         self.model_dependencies = {}  # Dict[model_name, List[dependency]]
@@ -71,15 +74,20 @@ class DBTProjectParser:
             self.project_name = config.get('name')
             self.project_config = config
             
-            logger.info(f"Parsed project configuration for {self.project_name}")
+            # Get profile name from project config or default to project name
+            self.profile_name = config.get('profile', self.project_name)
+            
+            logger.info(f"Parsed project configuration for {self.project_name} (profile: {self.profile_name})")
             
         except FileNotFoundError:
             logger.warning("dbt_project.yml not found, using repository name as project name")
             self.project_name = self.repo_provider.get_repository_name()
+            self.profile_name = self.project_name
             self.project_config = {}
         except Exception as e:
             logger.error(f"Error parsing dbt_project.yml: {e}")
             self.project_name = self.repo_provider.get_repository_name()
+            self.profile_name = self.project_name
             self.project_config = {}
     
     def _find_and_parse_models(self) -> None:
@@ -213,16 +221,28 @@ class DBTProjectParser:
         match = re.search(compiled_pattern, content)
         
         if match:
-            return match.group(1)
+            compiled_name = match.group(1)
+            logger.debug(f"Found explicit compiled name in comment: {compiled_name}")
+            return compiled_name
         
-        # If no explicit compiled name, try to infer from project config
+        # Try to get compiled name from profiles.yml
+        if self.profiles_parser:
+            compiled_name = self.profiles_parser.get_compiled_name(self.profile_name, model_name)
+            if compiled_name:
+                logger.debug(f"Found compiled name from profiles: {compiled_name}")
+                return compiled_name
+        
+        # If no explicit compiled name and no profiles info, try to infer from project config
         if self.project_config:
             dataset = self.project_config.get('models', {}).get('dataset')
             project = self.project_config.get('models', {}).get('project')
             
             if dataset and project:
-                return f"{project}.{dataset}.{model_name}"
+                compiled_name = f"{project}.{dataset}.{model_name}"
+                logger.debug(f"Inferred compiled name from project config: {compiled_name}")
+                return compiled_name
         
+        logger.debug(f"Could not determine compiled name for {model_name}")
         return None
     
     def _find_and_parse_schemas(self) -> None:

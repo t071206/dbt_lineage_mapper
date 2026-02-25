@@ -217,6 +217,10 @@
                 <div style="width: 20px; height: 2px; margin-right: 8px; border-top: 2px dashed #9932CC;"></div>
                 <div>Inferred Cross-Project Reference</div>
             </div>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; margin-right: 8px; border-top: 2px solid #228B22;"></div>
+                <div>Profiles-Based Cross-Project Reference</div>
+            </div>
             <div style="font-size: 11px; margin-top: 10px; color: #666;">
                 Note: Arrows show the direction of data flow from provider to consumer
             </div>
@@ -444,14 +448,34 @@
                     }
                 },
                 {
-                    selector: 'edge[inferred]',
+                    selector: 'edge[cross_project = "true"][inferred = "true"]',
                     style: {
                         'width': 3,
-                        'line-color': '#9932CC',  // Purple color for inferred edges
+                        'line-color': '#9932CC',  // Purple color for inferred cross-project edges
                         'target-arrow-color': '#9932CC',  // Changed from source-arrow to target-arrow
                         'target-arrow-shape': 'triangle',  // Changed from source-arrow to target-arrow
                         'line-style': 'dashed',   // Dashed line to indicate inferred connection
                         'line-dash-pattern': [6, 3]  // Dash pattern
+                    }
+                },
+                {
+                    selector: 'edge[cross_project = "true"][inferred = "false"]',
+                    style: {
+                        'width': 3,
+                        'line-color': '#228B22',  // Forest green for profiles-based cross-project edges
+                        'target-arrow-color': '#228B22',  // Changed from source-arrow to target-arrow
+                        'target-arrow-shape': 'triangle',  // Changed from source-arrow to target-arrow
+                        'line-style': 'solid'     // Solid line to indicate explicit connection
+                    }
+                },
+                {
+                    selector: 'edge[cross_project = "false"]',
+                    style: {
+                        'width': 2,
+                        'line-color': '#333',     // Regular color for same-project edges
+                        'target-arrow-color': '#333',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier'
                     }
                 }
             ],

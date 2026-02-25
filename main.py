@@ -26,6 +26,7 @@ from src.lineage_graph import LineageGraph
 from src.json_generator import JSONGenerator
 from src.csv_generator import CSVGenerator
 from src.html_generator import HTMLGenerator
+from src.profiles_parser import ProfilesParser
 
 # Set up logging
 logging.basicConfig(
@@ -119,6 +120,10 @@ def main():
                         help='Maximum depth for model lineage (default: unlimited)')
     parser.add_argument('--github-token', default=os.environ.get('GITHUB_TOKEN'),
                         help='GitHub API token (can also be set via GITHUB_TOKEN env var)')
+    parser.add_argument('--profiles', default=os.environ.get('DBT_PROFILES_PATH', os.path.expanduser('~/.dbt/profiles.yml')),
+                        help='Path to dbt profiles.yml file')
+    parser.add_argument('--profile-target', default=os.environ.get('DBT_PROFILE_TARGET'),
+                        help='Target environment to use from profiles.yml')
     parser.add_argument('--no-server', action='store_true',
                         help='Do not start a web server for HTML output')
     parser.add_argument('--port', type=int, default=int(os.environ.get('PORT', 8000)),
@@ -143,6 +148,12 @@ def main():
     # Create lineage graph
     lineage_graph = LineageGraph()
     
+    # Initialize profiles parser if profiles path is provided
+    profiles_parser = None
+    if args.profiles and os.path.exists(os.path.expanduser(args.profiles)):
+        logger.info(f"Using profiles from {args.profiles}")
+        profiles_parser = ProfilesParser(args.profiles, args.profile_target)
+    
     # Process each repository
     for repo_path in repo_paths:
         logger.info(f"Processing repository: {repo_path}")
@@ -151,15 +162,19 @@ def main():
         repo_provider = repo_factory.create_provider(repo_path)
         
         # Create parser
-        parser = DBTProjectParser(repo_provider)
+        parser = DBTProjectParser(repo_provider, profiles_parser)
         
         # Parse project and add to lineage graph
         project_info = parser.parse_project()
         lineage_graph.add_project(project_info)
     
-    # Link sources to external models by name
-    logger.info("Linking sources to external models by name")
-    lineage_graph.link_sources_to_external_models_by_name()
+    # Link sources to models using profiles and inference
+    if profiles_parser:
+        logger.info("Linking sources to models using profiles and inference")
+        lineage_graph.link_sources_to_models(profiles_parser)
+    else:
+        logger.info("Linking sources to external models by name (inference only)")
+        lineage_graph.link_sources_to_external_models_by_name()
     
     # Generate output based on format and selection
     output_format = args.format.lower()

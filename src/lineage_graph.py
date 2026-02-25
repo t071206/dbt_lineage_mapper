@@ -392,14 +392,116 @@ class LineageGraph:
                 # Recursively get dependents of the source node
                 self._get_downstream_dependents(source_id, node_ids, edges, current_depth + 1, max_depth)
     
-    def link_sources_to_external_models_by_name(self) -> None:
+    def link_sources_to_models(self, profiles_parser):
+        """
+        Link sources to models using both profiles.yml and inference.
+        
+        Args:
+            profiles_parser: Parser for dbt profiles.yml
+        """
+        # First pass: Use profiles.yml information when available
+        linked_sources = self._link_sources_using_profiles(profiles_parser)
+        
+        # Second pass: Use inference for any remaining unlinked sources
+        self._link_sources_to_external_models_by_name(linked_sources)
+        
+        logger.info(f"Linked sources to models: {len(linked_sources)} via profiles, remainder via inference")
+    
+    def _link_sources_using_profiles(self, profiles_parser):
+        """
+        Link sources to models using profiles.yml information.
+        
+        Args:
+            profiles_parser: Parser for dbt profiles.yml
+            
+        Returns:
+            Set of source node IDs that were linked
+        """
+        # Get all source nodes
+        source_nodes = [node for node in self.nodes.values() if node['type'] == 'source']
+        
+        # Get all model nodes
+        model_nodes = [node for node in self.nodes.values() if node['type'] == 'model']
+        
+        # Track which sources have been linked
+        linked_sources = set()
+        
+        # For each source node
+        for source_node in source_nodes:
+            source_project = source_node['project']
+            source_name = source_node['name']
+            
+            # Get compiled name from profiles
+            source_compiled_name = None
+            
+            # For sources, we need to use the profile name from the project
+            project_info = self.projects.get(source_project, {})
+            profile_name = project_info.get('config', {}).get('profile', source_project)
+            
+            # Try to get compiled name for the source
+            if 'source' in source_node:
+                # If it's a source table, use the table name
+                source_compiled_name = profiles_parser.get_compiled_name(profile_name, source_name)
+            
+            if not source_compiled_name:
+                continue
+                
+            # Look for models with matching compiled names
+            for model_node in model_nodes:
+                model_project = model_node['project']
+                model_name = model_node['name']
+                
+                # Skip if same project
+                if source_project == model_project:
+                    continue
+                
+                # Get compiled name from profiles
+                model_project_info = self.projects.get(model_project, {})
+                model_profile_name = model_project_info.get('config', {}).get('profile', model_project)
+                model_compiled_name = profiles_parser.get_compiled_name(model_profile_name, model_name)
+                
+                if not model_compiled_name:
+                    continue
+                
+                # If compiled names match, create a link
+                if source_compiled_name == model_compiled_name:
+                    # Determine if this is actually a cross-project link
+                    is_cross_project = source_project != model_project
+                    
+                    # Set the appropriate edge type
+                    edge_type = 'cross_project_source' if is_cross_project else 'profiles_match'
+                    
+                    self.edges.append({
+                        'source': model_node['id'],
+                        'target': source_node['id'],
+                        'type': edge_type,
+                        'inferred': False,  # Mark as NOT inferred (explicit from profiles)
+                        'cross_project': is_cross_project  # Explicitly mark if it's cross-project
+                    })
+                    
+                    linked_sources.add(source_node['id'])
+                    
+                    if is_cross_project:
+                        logger.info(f"Created profiles-based cross-project link: {model_node['id']} -> {source_node['id']}")
+                    else:
+                        logger.info(f"Created profiles-based same-project link: {model_node['id']} -> {source_node['id']}")
+        
+        return linked_sources
+    
+    def _link_sources_to_external_models_by_name(self, already_linked=None):
         """
         Create edges between sources and models in different projects that have the same name.
         This assumes that if a source in project A has the same name as a model in project B,
         they are related.
+        
+        Args:
+            already_linked: Set of source node IDs that have already been linked
         """
-        # Get all source nodes
-        source_nodes = [node for node in self.nodes.values() if node['type'] == 'source']
+        already_linked = already_linked or set()
+        
+        # Get all source nodes that haven't been linked yet
+        source_nodes = [node for node in self.nodes.values() 
+                       if node['type'] == 'source' and node['id'] not in already_linked]
         
         # Get all model nodes
         model_nodes = [node for node in self.nodes.values() if node['type'] == 'model']
@@ -427,7 +529,15 @@ class LineageGraph:
                         'source': model_node['id'],
                         'target': source_node['id'],
                         'type': 'cross_project_source',
-                        'inferred': True  # Mark as inferred for visualization
+                        'inferred': True,  # Mark as inferred for visualization
+                        'cross_project': True  # Explicitly mark as cross-project
                     })
                     
-                    logger.info(f"Created cross-project link (data flow): {model_node['id']} -> {source_node['id']}")
+                    logger.info(f"Created inferred cross-project link: {model_node['id']} -> {source_node['id']}")
+    
+    def link_sources_to_external_models_by_name(self):
+        """
+        Legacy method for backward compatibility.
+        Create edges between sources and models in different projects that have the same name.
+        """
+        return self._link_sources_to_external_models_by_name()
