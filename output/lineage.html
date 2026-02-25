@@ -555,9 +555,12 @@
             cy.layout({
                 name: 'dagre',
                 rankDir: 'LR',
-                nodeSep: 50,
-                rankSep: 100,
-                padding: 50
+                nodeSep: 80,      // Increase from 50
+                rankSep: 150,     // Increase from 100
+                padding: 100,     // Increase from 50
+                edgeSep: 10,      // Add this
+                marginX: 20,      // Add this
+                marginY: 20       // Add this
             }).run();
             
             // Center on the selected node
