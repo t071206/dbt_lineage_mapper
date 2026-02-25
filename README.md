@@ -7,7 +7,9 @@ A tool for creating lineage mappings between multiple dbt projects. This tool ca
 - Support for both GitHub repositories and local file systems
 - Parsing of dbt_project.yml and schema.yml files
 - Extraction of model dependencies from SQL files
-- Cross-project reference detection
+- Cross-project reference detection with dual resolution methods:
+  - Profiles.yml integration for accurate cross-project lineage based on compiled table names
+  - Name-based inference as a fallback mechanism
 - Multiple output formats:
   - Mermaid diagram for visualization in Markdown
   - Interactive HTML visualization with Cytoscape.js
@@ -108,7 +110,21 @@ cp .env.example .env
    PORT=8000
    ```
 
-3. **HTTP_PROXY** and **HTTPS_PROXY**: Proxy settings for GitHub API requests
+3. **DBT_PROFILES_PATH**: Path to the dbt profiles.yml file
+   ```
+   # .env file
+   DBT_PROFILES_PATH=~/.dbt/profiles.yml
+   ```
+   This setting allows the tool to read your dbt profiles.yml file to determine the actual compiled table names for more accurate cross-project lineage. The default path is `~/.dbt/profiles.yml`.
+
+4. **DBT_PROFILE_TARGET**: Target environment to use from profiles.yml
+   ```
+   # .env file
+   DBT_PROFILE_TARGET=dev
+   ```
+   This setting specifies which target environment from your profiles.yml to use for compiled table names. If the specified target is not found, the tool will fall back to the default target defined in your profiles.yml.
+
+5. **HTTP_PROXY** and **HTTPS_PROXY**: Proxy settings for GitHub API requests
    ```
    # .env file
    # Format: protocol://username:password@host:port
@@ -261,6 +277,37 @@ This will generate two files:
   - `html_generator.py`: Generator for interactive HTML visualization
   - `html_template.html`: HTML template for the interactive visualization
 
+## Profiles.yml Integration
+
+The tool can use your dbt profiles.yml file to improve the accuracy of cross-project lineage mapping. This is particularly useful in environments where multiple dbt projects reference each other's models.
+
+### How It Works
+
+1. The tool reads your profiles.yml file (specified by `DBT_PROFILES_PATH`)
+2. It extracts the target-specific information (using the target specified by `DBT_PROFILE_TARGET`)
+3. When linking sources to models across projects, it:
+   - First attempts to match based on the compiled table names from profiles.yml
+   - Falls back to name-based inference for any unmatched sources
+
+### Benefits
+
+- **More accurate cross-project lineage**: By using the actual compiled table names, the tool can establish more accurate connections between models across different projects
+- **Visual distinction**: In the HTML visualization, connections are color-coded:
+  - Solid green lines: Profiles-based cross-project references (high confidence)
+  - Dashed purple lines: Inferred cross-project references (lower confidence)
+
+### Configuration
+
+To use this feature, set the following environment variables in your `.env` file:
+
+```
+# Path to your dbt profiles.yml file
+DBT_PROFILES_PATH=~/.dbt/profiles.yml
+
+# Target environment to use (e.g., dev, prod)
+DBT_PROFILE_TARGET=dev
+```
+
 ## How It Works
 
 1. The tool reads the list of repositories from `repo_list.txt`
@@ -270,12 +317,16 @@ This will generate two files:
    - Parses the dbt project files
    - Extracts model dependencies
    - Adds the project to the lineage graph
-3. If a specific model is selected with `--select`:
+3. If profiles.yml integration is enabled:
+   - The tool reads your profiles.yml file
+   - It uses compiled table names to establish cross-project connections
+   - It falls back to name-based inference for any remaining unlinked sources
+4. If a specific model is selected with `--select`:
    - The tool finds the model across all projects
    - It traces both upstream dependencies and downstream dependents
    - It creates a subgraph containing only the relevant nodes and edges
    - The depth of the lineage traversal can be limited with the `--depth` option
-4. Once all projects are processed, it generates output in the specified format (Mermaid diagram, HTML, JSON, or CSV) showing the lineage between models
+5. Once all projects are processed, it generates output in the specified format (Mermaid diagram, HTML, JSON, or CSV) showing the lineage between models
 
 ## Limitations
 
