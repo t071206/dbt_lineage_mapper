@@ -146,14 +146,15 @@ class LineageGraph:
                     logger.warning(f"Unknown dependency type: {dep_type}")
                     continue
                 
-                # Add edge to the graph
+                # Add edge to the graph - reversed direction to show data flow
+                # Instead of model -> dependency, we now have dependency -> model
                 self.edges.append({
-                    'source': source_id,
-                    'target': target_id,
+                    'source': target_id,  # dependency (provider)
+                    'target': source_id,  # model (consumer)
                     'type': dep_type
                 })
                 
-                logger.debug(f"Added dependency edge: {source_id} -> {target_id}")
+                logger.debug(f"Added dependency edge (data flow): {target_id} -> {source_id}")
     
     def get_all_nodes(self) -> List[Dict[str, Any]]:
         """
@@ -420,7 +421,8 @@ class LineageGraph:
                 
                 # If names match (either simple name or full source reference) and projects are different
                 if (source_name == model_name or (full_source_name and model_name == source_name)) and source_project != model_project:
-                    # Create an edge from the model to the source
+                    # Create an edge from the model to the source (keeping this direction for data flow)
+                    # This represents data flowing from the external model to the source
                     self.edges.append({
                         'source': model_node['id'],
                         'target': source_node['id'],
@@ -428,4 +430,4 @@ class LineageGraph:
                         'inferred': True  # Mark as inferred for visualization
                     })
                     
-                    logger.info(f"Created cross-project link: {model_node['id']} -> {source_node['id']}")
+                    logger.info(f"Created cross-project link (data flow): {model_node['id']} -> {source_node['id']}")

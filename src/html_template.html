@@ -8,6 +8,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
     <style>
+        /* Pattern backgrounds for source nodes */
+        .pattern-stripes {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0L10 10M10 0L0 10' stroke='white' stroke-width='1'/%3E%3C/svg%3E");
+            background-size: 10px 10px;
+        }
+        
+        .pattern-dots {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2.5' cy='2.5' r='1.5' fill='white'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5' fill='white'/%3E%3C/svg%3E");
+            background-size: 10px 10px;
+        }
+        
+        .pattern-grid {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0V10M10 0V10M0 0H10M0 10H10' stroke='white' stroke-width='0.5'/%3E%3C/svg%3E");
+            background-size: 10px 10px;
+        }
+        
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
@@ -180,22 +196,29 @@
                 <div>Model (schema.yml)</div>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: #ff7f0e;"></div>
+                <div class="legend-color pattern-grid" style="background-color: #7f7f7f;"></div>
                 <div>Source</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color pattern-grid" style="background: linear-gradient(45deg, #1f77b4, #ff7f0e, #2ca02c, #d62728);"></div>
+                <div>Cross-Project Source (Project Color)</div>
             </div>
             
             <h3>Edge Types</h3>
             <div class="legend-item">
                 <div class="legend-color" style="background-color: #333;"></div>
-                <div>Normal Dependency</div>
+                <div>Data Flow (Provider → Consumer)</div>
             </div>
             <div class="legend-item">
                 <div class="legend-color" style="background-color: #ff0000;"></div>
-                <div>Cross-Project Dependency</div>
+                <div>Cross-Project Data Flow</div>
             </div>
             <div class="legend-item">
                 <div style="width: 20px; height: 2px; margin-right: 8px; border-top: 2px dashed #9932CC;"></div>
-                <div>Inferred Cross-Project Source</div>
+                <div>Inferred Cross-Project Reference</div>
+            </div>
+            <div style="font-size: 11px; margin-top: 10px; color: #666;">
+                Note: Arrows show the direction of data flow from provider to consumer
             </div>
         </div>
         <div id="sidebar">
@@ -231,10 +254,10 @@
                 '#ff7f0e', // orange
                 '#2ca02c', // green
                 '#d62728', // red
-                '#9467bd', // purple
+                '#9467bd', // purple (added back since we're not using a fixed color for cross-project sources)
                 '#8c564b', // brown
                 '#e377c2', // pink
-                '#7f7f7f', // gray
+                // '#7f7f7f' removed to reserve grey for source nodes
                 '#bcbd22', // olive
                 '#17becf'  // teal
             ];
@@ -351,8 +374,13 @@
                 {
                     selector: 'node.source',
                     style: {
-                        'background-color': '#ff7f0e',
-                        'text-outline-color': '#ff7f0e'
+                        'background-color': '#7f7f7f', // Fixed grey color for all source nodes
+                        'text-outline-color': '#7f7f7f', // Fixed grey color for text outline
+                        'background-image': 'data:image/svg+xml,%3Csvg width="10" height="10" xmlns="http://www.w3.org/2000/svg"%3E%3Cpath d="M0 0V10M10 0V10M0 0H10M0 10H10" stroke="white" stroke-width="0.5"/%3E%3C/svg%3E',
+                        'background-image-opacity': 1,
+                        'background-width': '10px',
+                        'background-height': '10px',
+                        'background-fit': 'cover'
                     }
                 },
                 {
@@ -381,12 +409,28 @@
                     }
                 },
                 {
+                    selector: 'node.source.external',
+                    style: {
+                        'background-color': function(ele) {
+                            return projectColors[ele.data('project')] || '#1f77b4';
+                        },
+                        'text-outline-color': function(ele) {
+                            return projectColors[ele.data('project')] || '#1f77b4';
+                        },
+                        'background-image': 'data:image/svg+xml,%3Csvg width="10" height="10" xmlns="http://www.w3.org/2000/svg"%3E%3Cpath d="M0 0V10M10 0V10M0 0H10M0 10H10" stroke="white" stroke-width="0.5"/%3E%3C/svg%3E',
+                        'background-image-opacity': 1,
+                        'background-width': '10px',
+                        'background-height': '10px',
+                        'background-fit': 'cover'
+                    }
+                },
+                {
                     selector: 'edge',
                     style: {
                         'width': 2,
                         'line-color': '#333',
-                        'source-arrow-color': '#333',
-                        'source-arrow-shape': 'triangle',
+                        'target-arrow-color': '#333',  // Changed from source-arrow to target-arrow
+                        'target-arrow-shape': 'triangle',  // Changed from source-arrow to target-arrow
                         'curve-style': 'bezier'
                     }
                 },
@@ -395,8 +439,8 @@
                     style: {
                         'width': 4,
                         'line-color': '#ff0000',
-                        'source-arrow-color': '#ff0000',
-                        'source-arrow-shape': 'triangle'
+                        'target-arrow-color': '#ff0000',  // Changed from source-arrow to target-arrow
+                        'target-arrow-shape': 'triangle'  // Changed from source-arrow to target-arrow
                     }
                 },
                 {
@@ -404,8 +448,8 @@
                     style: {
                         'width': 3,
                         'line-color': '#9932CC',  // Purple color for inferred edges
-                        'source-arrow-color': '#9932CC',
-                        'source-arrow-shape': 'triangle',
+                        'target-arrow-color': '#9932CC',  // Changed from source-arrow to target-arrow
+                        'target-arrow-shape': 'triangle',  // Changed from source-arrow to target-arrow
                         'line-style': 'dashed',   // Dashed line to indicate inferred connection
                         'line-dash-pattern': [6, 3]  // Dash pattern
                     }
